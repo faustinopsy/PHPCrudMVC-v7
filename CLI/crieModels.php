@@ -31,7 +31,7 @@ class CrieModels
             $modelContent .= "class $modelName {\n";
 
             foreach ($columns as $column) {
-                $modelContent .= "    private \${$column['Field']};\n";
+                $modelContent .= "    public \${$column['Field']};\n";
             }
 
             $modelContent .= "\n    public function __construct(array \$data = []) {\n";
