@@ -2,3 +2,6 @@ vendor
 logs
 composer.lock
 .git
+FormGeneratorController.php
+ModelConfigController.php
+formconfig.html

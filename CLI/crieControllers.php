@@ -1,6 +1,6 @@
 <?php
 
-namespace Fast\Back\Generator;
+namespace Fast\Back\CLI;
 
 require_once __DIR__ .'/../vendor/autoload.php';
 
