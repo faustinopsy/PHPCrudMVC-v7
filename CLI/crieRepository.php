@@ -207,6 +207,26 @@ class CrieRepository
     
         $methods = "";
     
+        $methods .= "    public function getMasterWithDetails() {\n";
+        $methods .= "        try {\n";
+        $methods .= "            \$masterQuery = \"SELECT * FROM $masterTable WHERE deletado = 0\";\n";
+        $methods .= "            \$stmtMaster = \$this->pdo->query(\$masterQuery);\n";
+        $methods .= "            \$masterRecords = \$stmtMaster->fetchAll(PDO::FETCH_ASSOC);\n";
+        $methods .= "\n";
+        $methods .= "            foreach (\$masterRecords as &\$record) {\n";
+        $methods .= "                \$detailQuery = \"SELECT * FROM $detailTable WHERE {$relation['detail_column']} = :master_id AND deletado = 0\";\n";
+        $methods .= "                \$stmtDetail = \$this->pdo->prepare(\$detailQuery);\n";
+        $methods .= "                \$stmtDetail->bindValue(':master_id', \$record['id'], PDO::PARAM_INT);\n";
+        $methods .= "                \$stmtDetail->execute();\n";
+        $methods .= "                \$record['details'] = \$stmtDetail->fetchAll(PDO::FETCH_ASSOC);\n";
+        $methods .= "            }\n";
+        $methods .= "\n";
+        $methods .= "            return \$masterRecords;\n";
+        $methods .= "        } catch (PDOException \$e) {\n";
+        $methods .= "            return \$this->generateErrorResponse(\$e);\n";
+        $methods .= "        }\n";
+        $methods .= "    }\n\n";
+        
         $methods .= "    public function saveMasterDetail(\$data) {\n";
         $methods .= "        \$this->pdo->beginTransaction();\n";
         $methods .= "        try {\n";
