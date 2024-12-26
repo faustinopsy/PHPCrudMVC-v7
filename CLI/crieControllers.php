@@ -59,20 +59,13 @@ class ControllerGenerator
 
             $reflection = new ReflectionClass($repositoryClassName);
             $rotas = lcfirst($modelClassName);
-            $methods = [
-                'create' => "#[Router('/$rotas', methods: ['POST'])]\n    public function create(\$data) {\n        \$model = new $modelClassName(\$data);\n        \$result = \$this->repository->create(\$model);\n        return \$this->jsonResponse(\$result, 'Registro criado com sucesso.', 'Erro ao criar registro.', !\$result);\n    }\n",
-                'findAll' => "#[Router('/$rotas', methods: ['GET'])]\n    public function findAll() {\n        \$result = \$this->repository->findAll();\n        return \$this->jsonResponse(\$result, 'Registros encontrados.', 'Nenhum registro encontrado.', empty(\$result));\n    }\n",
-                'findById' => "#[Router('/$rotas/{id}', methods: ['GET'])]\n    public function findById(\$id) {\n        \$result = \$this->repository->findById(\$id);\n        return \$this->jsonResponse(\$result, 'Registro encontrado.', 'Registro não encontrado.', !\$result);\n    }\n",
-                'update' => "#[Router('/$rotas/{id}', methods: ['PUT'])]\n    public function update(\$id, \$data) {\n        \$model = new $modelClassName(\$data);\n        \$model->setId(\$id);\n        \$result = \$this->repository->update(\$id,\$model);\n        return \$this->jsonResponse(\$result, 'Registro atualizado com sucesso.', 'Erro ao atualizar registro.', !\$result);\n    }\n",
-                'delete' => "#[Router('/$rotas/{id}', methods: ['DELETE'])]\n    public function delete(\$id) {\n        \$result = \$this->repository->delete(\$id);\n        return \$this->jsonResponse(\$result, 'Registro deletado com sucesso.', 'Erro ao deletar registro.');\n    }\n",
-            ];
 
-            $content = "<?php\n\nnamespace {$this->controllerNamespace};\n\nuse {$this->repositoryNamespace}\\$repositoryShortName;\nuse {$this->modelNamespace}\\$modelClassName;\nuse {$this->rotaNamespace};\n\nclass $controllerClassName {\n    private \$repository;\n\n    public function __construct() {\n        \$this->repository = new $repositoryShortName();\n    }\n\n    private function jsonResponse(\$data, string \$successMessage, string \$errorMessage, bool \$isError = false) {\n        \$response = [\n            'status' => !\$isError,\n            'message' => \$isError ? \$errorMessage : \$successMessage,\n            'data' => \$data\n        ];\n        header('Content-Type: application/json; charset=utf-8');\n        http_response_code(\$isError ? 400 : 200);\n        echo json_encode(\$response, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);\n    }\n\n";
+            $methods = $this->generateMethods($reflection, $modelClassName, $rotas);
 
-            foreach ($methods as $methodName => $methodCode) {
-                if ($reflection->hasMethod($methodName)) {
-                    $content .= "    $methodCode\n";
-                }
+            $content = "<?php\n\nnamespace {$this->controllerNamespace};\n\nuse {$this->repositoryNamespace}\\$repositoryShortName;\nuse {$this->modelNamespace}\\$modelClassName;\nuse {$this->rotaNamespace};\n\nclass $controllerClassName {\n    private \$repository;\n\n    public function __construct() {\n        \$this->repository = new $repositoryShortName();\n            }\n\n    private function jsonResponse(\$data, string \$successMessage, string \$errorMessage, bool \$isError = false) {\n        \$response = [\n            'status' => \$isError,\n            'message' => \$isError ? \$successMessage : \$errorMessage ,\n            'data' => \$data\n        ];\n        header('Content-Type: application/json; charset=utf-8');\n        http_response_code(\$isError ? 400 : 200);\n        echo json_encode(\$response, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);\n    }\n\n";
+
+            foreach ($methods as $methodCode) {
+                $content .= "    $methodCode\n";
             }
 
             $content .= "}";
@@ -80,6 +73,40 @@ class ControllerGenerator
             file_put_contents($controllerFilePath, $content);
             echo "Controlador $controllerClassName gerado com sucesso!\n";
         }
+    }
+
+    private function generateMethods(ReflectionClass $reflection, string $modelClassName, string $rotas): array
+    {
+        $methods = [];
+        foreach ($reflection->getMethods() as $method) {
+            if ($method->isPublic() && !in_array($method->getName(), ['__construct'])) {
+                $methodName = $method->getName();
+                $httpMethod = 'POST';
+                $route = "/$rotas/{$methodName}";
+                $parameters = "\$data";
+
+                if (stripos($methodName, 'findAll') !== false) {
+                    $httpMethod = 'GET';
+                    $route = "/$rotas";
+                    $parameters = '';
+                } elseif (stripos($methodName, 'findById') !== false) {
+                    $httpMethod = 'GET';
+                    $route = "/$rotas/{id}";
+                    $parameters = "\$id";
+                } elseif (stripos($methodName, 'update') !== false) {
+                    $httpMethod = 'PUT';
+                    $route = "/$rotas/{id}";
+                    $parameters = "\$id, \$data";
+                } elseif (stripos($methodName, 'delete') !== false) {
+                    $httpMethod = 'DELETE';
+                    $route = "/$rotas/{id}";
+                    $parameters = "\$id";
+                }
+
+                $methods[] = "#[Router('$route', methods: ['$httpMethod'])]\n    public function {$methodName}($parameters) {\n        \$result = \$this->repository->{$methodName}($parameters);\n        if (!is_array(\$result) && !\$result['success']) {\n            return \$this->jsonResponse(null, '', \$result['message'], \$result['success']);\n        }\n        return \$this->jsonResponse(\$result, 'Operação realizada com sucesso.', '', true);\n    }";
+            }
+        }
+        return $methods;
     }
 }
 

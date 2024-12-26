@@ -34,10 +34,10 @@ class CrieModels
                 $modelContent .= "    public \${$column['Field']};\n";
             }
 
-            $modelContent .= "\n    public function __construct(array \$data = []) {\n";
+            $modelContent .= "\n    public function __construct(\$data) {\n";
             foreach ($columns as $column) {
                 $field = $column['Field'];
-                $modelContent .= "        \$this->$field = \$data['$field'] ?? null;\n";
+                $modelContent .= "        \$this->$field = \$data->$field ?? null;\n";
             }
             $modelContent .= "    }\n";
 
