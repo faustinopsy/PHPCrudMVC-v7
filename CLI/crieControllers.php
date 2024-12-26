@@ -62,7 +62,7 @@ class ControllerGenerator
 
             $methods = $this->generateMethods($reflection, $modelClassName, $rotas);
 
-            $content = "<?php\n\nnamespace {$this->controllerNamespace};\n\nuse {$this->repositoryNamespace}\\$repositoryShortName;\nuse {$this->modelNamespace}\\$modelClassName;\nuse {$this->rotaNamespace};\n\nclass $controllerClassName {\n    private \$repository;\n\n    public function __construct() {\n        \$this->repository = new $repositoryShortName();\n            }\n\n    private function jsonResponse(\$data, string \$successMessage, string \$errorMessage, bool \$isError = false) {\n        \$response = [\n            'status' => \$isError,\n            'message' => \$isError ? \$successMessage : \$errorMessage ,\n            'data' => \$data\n        ];\n        header('Content-Type: application/json; charset=utf-8');\n        http_response_code(\$isError ? 400 : 200);\n        echo json_encode(\$response, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);\n    }\n\n";
+            $content = "<?php\n\nnamespace {$this->controllerNamespace};\n\nuse {$this->repositoryNamespace}\\$repositoryShortName;\nuse {$this->modelNamespace}\\$modelClassName;\nuse {$this->rotaNamespace};\n\nclass $controllerClassName {\n    private \$repository;\n\n    public function __construct() {\n        \$this->repository = new $repositoryShortName();\n            }\n\n    private function jsonResponse(\$data, string \$successMessage, string \$errorMessage, bool \$isError = false) {\n        \$response = [\n            'status' => \$isError,\n            'message' => \$isError ? \$successMessage : \$errorMessage ,\n            'data' => \$data\n        ];\n        header('Content-Type: application/json; charset=utf-8');\n        http_response_code(\$isError ? 200 : 400);\n        echo json_encode(\$response, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);\n    }\n\n";
 
             foreach ($methods as $methodCode) {
                 $content .= "    $methodCode\n";
@@ -82,7 +82,7 @@ class ControllerGenerator
             if ($method->isPublic() && !in_array($method->getName(), ['__construct'])) {
                 $methodName = $method->getName();
                 $httpMethod = 'POST';
-                $route = "/$rotas/{$methodName}";
+                $route = "/$rotas";
                 $parameters = "\$data";
 
                 if (stripos($methodName, 'findAll') !== false) {
@@ -103,7 +103,7 @@ class ControllerGenerator
                     $parameters = "\$id";
                 }
 
-                $methods[] = "#[Router('$route', methods: ['$httpMethod'])]\n    public function {$methodName}($parameters) {\n        \$result = \$this->repository->{$methodName}($parameters);\n        if (!is_array(\$result) && !\$result['success']) {\n            return \$this->jsonResponse(null, '', \$result['message'], \$result['success']);\n        }\n        return \$this->jsonResponse(\$result, 'Operação realizada com sucesso.', '', true);\n    }";
+                $methods[] = "#[Router('$route', methods: ['$httpMethod'])]\n    public function {$methodName}($parameters) {\n        \$result = \$this->repository->{$methodName}($parameters);\n        if (is_array(\$result) && !\$result['success']) {\n            return \$this->jsonResponse(null, '', \$result['message'], \$result['success']);\n        }\n        return \$this->jsonResponse(\$result, 'Operação realizada com sucesso.', '', true);\n    }";
             }
         }
         return $methods;

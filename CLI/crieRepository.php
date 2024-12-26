@@ -48,6 +48,7 @@ class CrieRepository
             $repositoryContent .= $this->generateFindAllMethod($table);
             $repositoryContent .= $this->generateUpdateMethod($table, $filteredColumns);
             $repositoryContent .= $this->generateDeleteMethod($table);
+            $repositoryContent .= $this->generateErrorResponse();
 
             $repositoryContent .= "}\n";
 
@@ -76,7 +77,7 @@ class CrieRepository
 
         $method .= "            return \$stmt->execute();\n";
         $method .= "        } catch (PDOException \$e) {\n";
-        $method .= "            return false;\n";
+        $method .= "            return \$this->generateErrorResponse(\$e);\n";
         $method .= "        }\n";
         $method .= "    }\n\n";
 
@@ -93,7 +94,7 @@ class CrieRepository
                "            \$stmt->execute();\n" .
                "            return \$stmt->fetch(PDO::FETCH_ASSOC) ?: null;\n" .
                "        } catch (PDOException \$e) {\n" .
-               "            return null;\n" .
+               "            return \$this->generateErrorResponse(\$e);\n" .
                "        }\n" .
                "    }\n\n";
     }
@@ -106,7 +107,7 @@ class CrieRepository
                "            \$stmt = \$this->pdo->query(\$query);\n" .
                "            return \$stmt->fetchAll(PDO::FETCH_ASSOC);\n" .
                "        } catch (PDOException \$e) {\n" .
-               "            return [];\n" .
+               "            return \$this->generateErrorResponse(\$e);\n" .
                "        }\n" .
                "    }\n\n";
     }
@@ -127,7 +128,7 @@ class CrieRepository
         $method .= "            \$stmt->bindValue(':id', \$id, PDO::PARAM_INT);\n";
         $method .= "            return \$stmt->execute();\n";
         $method .= "        } catch (PDOException \$e) {\n";
-        $method .= "            return false;\n";
+        $method .= "           return \$this->generateErrorResponse(\$e);\n";
         $method .= "        }\n";
         $method .= "    }\n\n";
 
@@ -143,9 +144,21 @@ class CrieRepository
                "            \$stmt->bindValue(':id', \$id, PDO::PARAM_INT);\n" .
                "            return \$stmt->execute();\n" .
                "        } catch (PDOException \$e) {\n" .
-               "            return false;\n" .
+               "            return \$this->generateErrorResponse(\$e);\n" .
                "        }\n" .
                "    }\n\n";
+    }
+    private function generateErrorResponse()
+    {
+        return "    private function generateErrorResponse(\$e)\n" .
+               "     {\n" .
+               "         return [\n" .
+               "             'success' => false,\n" .
+               "             'message' => \$e->getMessage(),\n" .
+               "             'code' => \$e->getCode(),\n" .
+               "         ];\n" .
+               "     }\n" .
+               "  \n";
     }
 
     private function camelCase($string)
