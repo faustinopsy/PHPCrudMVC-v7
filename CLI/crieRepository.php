@@ -26,7 +26,6 @@ class CrieRepository
             $columnsQuery = $this->pdo->query("DESCRIBE $table");
             $columns = $columnsQuery->fetchAll(PDO::FETCH_ASSOC);
 
-            // Filtra as colunas para ignorar o campo `id`
             $filteredColumns = array_filter($columns, fn($col) => $col['Field'] !== 'id');
 
             $repositoryName = ucfirst($this->camelCase($table)) . 'Repository';
@@ -49,6 +48,7 @@ class CrieRepository
             $repositoryContent .= $this->generateUpdateMethod($table, $filteredColumns);
             $repositoryContent .= $this->generateDeleteMethod($table);
             $repositoryContent .= $this->generateErrorResponse();
+            $repositoryContent .= $this->generateRelationshipMethods($table);
 
             $repositoryContent .= "}\n";
 
@@ -159,6 +159,133 @@ class CrieRepository
                "         ];\n" .
                "     }\n" .
                "  \n";
+    }
+
+    private function detectRelationships($table)
+    {
+        $query = "
+            SELECT 
+                TABLE_NAME AS detail_table, 
+                COLUMN_NAME AS detail_column, 
+                REFERENCED_TABLE_NAME AS master_table, 
+                REFERENCED_COLUMN_NAME AS master_column
+            FROM 
+                INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+            WHERE 
+                TABLE_SCHEMA = DATABASE() 
+                AND (TABLE_NAME = :table OR REFERENCED_TABLE_NAME = :table)
+                AND REFERENCED_TABLE_NAME IS NOT NULL;
+            ;
+        ";
+
+        $stmt = $this->pdo->prepare($query);
+        $stmt->bindValue(':table', $table, PDO::PARAM_STR);
+        $stmt->execute();
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    private function getTableColumns($table)
+    {
+        $query = "DESCRIBE $table";
+        $stmt = $this->pdo->query($query);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    private function generateMasterDetailMethods($masterTable, $detailTable, $relation)
+    {
+
+        $masterColumns = $this->getTableColumns($masterTable);
+        $detailColumns = $this->getTableColumns($detailTable);
+    
+        $masterColumns = array_filter($masterColumns, fn($col) => !in_array($col['Field'], ['id', 'criado_em', 'atualizado_em', 'deletado_em','deletado','aprovado_por']));
+        $masterFields = array_filter($masterColumns, fn($col) => $col['Field'] !== 'id');
+        $detailFields = array_filter($detailColumns, fn($col) => $col['Field'] !== 'id');
+    
+        $masterSetClause = implode(', ', array_map(fn($col) => "{$col['Field']} = :{$col['Field']}", $masterFields));
+        $detailInsertColumns = implode(', ', array_column($detailFields, 'Field'));
+        $detailInsertPlaceholders = implode(', ', array_map(fn($col) => ":{$col['Field']}", $detailFields));
+    
+        $methods = "";
+    
+        $methods .= "    public function saveMasterDetail(\$masterData, \$detailsData) {\n";
+        $methods .= "        \$this->pdo->beginTransaction();\n";
+        $methods .= "        try {\n";
+    
+        $methods .= "            if (isset(\$masterData->id) && !empty(\$masterData->id)) {\n";
+        $methods .= "                \$queryMaster = \"UPDATE $masterTable SET $masterSetClause WHERE id = :id\";\n";
+        $methods .= "                \$stmtMaster = \$this->pdo->prepare(\$queryMaster);\n";
+        $methods .= "                \$stmtMaster->bindValue(':id', \$masterData->id, PDO::PARAM_INT);\n";
+        $methods .= "            } else {\n";
+        $methods .= "                \$queryMaster = \"INSERT INTO $masterTable (" . implode(', ', array_column($masterFields, 'Field')) . ") VALUES (" . implode(', ', array_map(fn($col) => ":{$col['Field']}", $masterFields)) . ")\";\n";
+        $methods .= "                \$stmtMaster = \$this->pdo->prepare(\$queryMaster);\n";
+        $methods .= "            }\n";
+    
+        foreach ($masterFields as $field) {
+            $methods .= "            \$stmtMaster->bindValue(':{$field['Field']}', \$masterData->{$field['Field']} ?? null);\n";
+        }
+        $methods .= "            \$stmtMaster->execute();\n";
+        $methods .= "            \$masterId = \$masterData->id ?? \$this->pdo->lastInsertId();\n\n";
+    
+        $methods .= "            \$queryInsertDetails = \"INSERT INTO $detailTable ($detailInsertColumns) VALUES ($detailInsertPlaceholders)\";\n";
+        $methods .= "            \$stmtInsertDetails = \$this->pdo->prepare(\$queryInsertDetails);\n";
+        $methods .= "            foreach (\$detailsData as \$detail) {\n";
+        foreach ($detailFields as $field) {
+            $methods .= "                \$stmtInsertDetails->bindValue(':{$field['Field']}', \$detail->{$field['Field']} ?? null);\n";
+        }
+        $methods .= "                \$stmtInsertDetails->execute();\n";
+        $methods .= "            }\n\n";
+    
+        $methods .= "            \$this->pdo->commit();\n";
+        $methods .= "            return true;\n";
+        $methods .= "        } catch (PDOException \$e) {\n";
+        $methods .= "            \$this->pdo->rollBack();\n";
+        $methods .= "            return \$this->generateErrorResponse(\$e);\n";
+        $methods .= "        }\n";
+        $methods .= "    }\n\n";
+    
+        $methods .= "    public function deleteDetail(\$detailId) {\n";
+        $methods .= "        \$query = \"DELETE FROM $detailTable WHERE id = :id\";\n";
+        $methods .= "        try {\n";
+        $methods .= "            \$stmt = \$this->pdo->prepare(\$query);\n";
+        $methods .= "            \$stmt->bindValue(':id', \$detailId, PDO::PARAM_INT);\n";
+        $methods .= "            return \$stmt->execute();\n";
+        $methods .= "        } catch (PDOException \$e) {\n";
+        $methods .= "            return \$this->generateErrorResponse(\$e);\n";
+        $methods .= "        }\n";
+        $methods .= "    }\n\n";
+    
+        $methods .= "    public function updateDetail(\$detailId, \$data) {\n";
+        $methods .= "        \$setClause = implode(', ', array_map(fn(\$key) => \"\$key = :\$key\", array_keys((array) \$data)));\n";
+        $methods .= "        \$query = \"UPDATE $detailTable SET \$setClause WHERE id = :id\";\n";
+        $methods .= "        try {\n";
+        $methods .= "            \$stmt = \$this->pdo->prepare(\$query);\n";
+        $methods .= "            foreach (\$data as \$key => \$value) {\n";
+        $methods .= "                \$stmt->bindValue(\":\$key\", \$value);\n";
+        $methods .= "            }\n";
+        $methods .= "            \$stmt->bindValue(':id', \$detailId, PDO::PARAM_INT);\n";
+        $methods .= "            return \$stmt->execute();\n";
+        $methods .= "        } catch (PDOException \$e) {\n";
+        $methods .= "            return \$this->generateErrorResponse(\$e);\n";
+        $methods .= "        }\n";
+        $methods .= "    }\n\n";
+    
+        return $methods;
+    }
+    
+    
+    private function generateRelationshipMethods($table)
+    {
+        $relationships = $this->detectRelationships($table);
+        $methods = "";
+    
+        foreach ($relationships as $relation) {
+            if ($relation['master_table'] === $table) {
+                $methods .= $this->generateMasterDetailMethods($table, $relation['detail_table'], $relation);
+            }
+        }
+    
+        return $methods;
     }
 
     private function camelCase($string)

@@ -103,7 +103,7 @@ class ControllerGenerator
                     $parameters = "\$id";
                 }
 
-                $methods[] = "#[Router('$route', methods: ['$httpMethod'])]\n    public function {$methodName}($parameters) {\n        \$result = \$this->repository->{$methodName}($parameters);\n        if (is_array(\$result) && !\$result['success']) {\n            return \$this->jsonResponse(null, '', \$result['message'], \$result['success']);\n        }\n        return \$this->jsonResponse(\$result, 'Operação realizada com sucesso.', '', true);\n    }";
+                $methods[] = "#[Router('$route', methods: ['$httpMethod'])]\n    public function {$methodName}($parameters) {\n        \$result = \$this->repository->{$methodName}($parameters);\n        if (!is_array(\$result) && !\$result['success']) {\n            return \$this->jsonResponse(null, '', \$result['message'], \$result['success']);\n        }\n        return \$this->jsonResponse(\$result, 'Operação realizada com sucesso.', '', true);\n    }";
             }
         }
         return $methods;
