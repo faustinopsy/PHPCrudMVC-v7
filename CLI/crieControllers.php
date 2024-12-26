@@ -95,8 +95,8 @@ class ControllerGenerator
                     $parameters = "\$id";
                 } elseif (stripos($methodName, 'getMasterWithDetails') !== false) {
                     $httpMethod = 'GET';
-                    $route = "/$rotas/{id}/getmasterdetail";
-                    $parameters = "\$id";
+                    $route = "/$rotas/getmasterdetail";
+                    $parameters = "";
                 } elseif (stripos($methodName, 'saveMasterDetail') !== false) {
                     $httpMethod = 'POST';
                     $route = "/$rotas/savemasterdetail";
