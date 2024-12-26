@@ -93,6 +93,18 @@ class ControllerGenerator
                     $httpMethod = 'GET';
                     $route = "/$rotas/{id}";
                     $parameters = "\$id";
+                }elseif (stripos($methodName, 'saveMasterDetail') !== false) {
+                    $httpMethod = 'POST';
+                    $route = "/$rotas/savemasterdetail";
+                    $parameters = "\$data";
+                } elseif (stripos($methodName, 'atualizaDetail') !== false) {
+                    $httpMethod = 'PUT';
+                    $route = "/$rotas/{id}/updatedetail";
+                    $parameters = "\$id";
+                } elseif (stripos($methodName, 'excluiDetail') !== false) {
+                    $httpMethod = 'DELETE';
+                    $route = "/$rotas/{id}/deletedetail";
+                    $parameters = "\$id";
                 } elseif (stripos($methodName, 'update') !== false) {
                     $httpMethod = 'PUT';
                     $route = "/$rotas/{id}";

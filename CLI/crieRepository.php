@@ -194,11 +194,10 @@ class CrieRepository
 
     private function generateMasterDetailMethods($masterTable, $detailTable, $relation)
     {
-
         $masterColumns = $this->getTableColumns($masterTable);
         $detailColumns = $this->getTableColumns($detailTable);
-    
-        $masterColumns = array_filter($masterColumns, fn($col) => !in_array($col['Field'], ['id', 'criado_em', 'atualizado_em', 'deletado_em','deletado','aprovado_por']));
+        $detailColumns = array_filter($detailColumns, fn($col) => !in_array($col['Field'], ['id', 'status', 'criado_em', 'atualizado_em', 'deletado_em', 'deletado', 'aprovado_por']));
+        $masterColumns = array_filter($masterColumns, fn($col) => !in_array($col['Field'], ['id', 'status', 'criado_em', 'atualizado_em', 'deletado_em', 'deletado', 'aprovado_por']));
         $masterFields = array_filter($masterColumns, fn($col) => $col['Field'] !== 'id');
         $detailFields = array_filter($detailColumns, fn($col) => $col['Field'] !== 'id');
     
@@ -208,9 +207,13 @@ class CrieRepository
     
         $methods = "";
     
-        $methods .= "    public function saveMasterDetail(\$masterData, \$detailsData) {\n";
+        $methods .= "    public function saveMasterDetail(\$data) {\n";
         $methods .= "        \$this->pdo->beginTransaction();\n";
         $methods .= "        try {\n";
+    
+        $methods .= "            \$masterData = \$data;\n";
+        $methods .= "            \$detailsData = \$masterData->details ?? [];\n";
+        $methods .= "            unset(\$masterData->details);\n";
     
         $methods .= "            if (isset(\$masterData->id) && !empty(\$masterData->id)) {\n";
         $methods .= "                \$queryMaster = \"UPDATE $masterTable SET $masterSetClause WHERE id = :id\";\n";
@@ -230,6 +233,7 @@ class CrieRepository
         $methods .= "            \$queryInsertDetails = \"INSERT INTO $detailTable ($detailInsertColumns) VALUES ($detailInsertPlaceholders)\";\n";
         $methods .= "            \$stmtInsertDetails = \$this->pdo->prepare(\$queryInsertDetails);\n";
         $methods .= "            foreach (\$detailsData as \$detail) {\n";
+        $methods .= "                \$detail->curso_id = \$masterId;\n";
         foreach ($detailFields as $field) {
             $methods .= "                \$stmtInsertDetails->bindValue(':{$field['Field']}', \$detail->{$field['Field']} ?? null);\n";
         }
@@ -244,8 +248,8 @@ class CrieRepository
         $methods .= "        }\n";
         $methods .= "    }\n\n";
     
-        $methods .= "    public function deleteDetail(\$detailId) {\n";
-        $methods .= "        \$query = \"DELETE FROM $detailTable WHERE id = :id\";\n";
+        $methods .= "    public function excluiDetail(\$detailId) {\n";
+        $methods .= "        \$query = \"UPDATE $detailTable SET deletado = 1, status = 'pendente_exclusao' WHERE id = :id\";\n";
         $methods .= "        try {\n";
         $methods .= "            \$stmt = \$this->pdo->prepare(\$query);\n";
         $methods .= "            \$stmt->bindValue(':id', \$detailId, PDO::PARAM_INT);\n";
@@ -255,7 +259,7 @@ class CrieRepository
         $methods .= "        }\n";
         $methods .= "    }\n\n";
     
-        $methods .= "    public function updateDetail(\$detailId, \$data) {\n";
+        $methods .= "    public function atualizaDetail(\$detailId, \$data) {\n";
         $methods .= "        \$setClause = implode(', ', array_map(fn(\$key) => \"\$key = :\$key\", array_keys((array) \$data)));\n";
         $methods .= "        \$query = \"UPDATE $detailTable SET \$setClause WHERE id = :id\";\n";
         $methods .= "        try {\n";
