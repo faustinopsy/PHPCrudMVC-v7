@@ -62,7 +62,7 @@ FastBackPHP foi criado para desenvolvedores que desejam automatizar a construç�
     - **Opção 1:** Configure o banco de dados. Esse passo é obrigatório para outros comandos.
     - **Opção 2:** Gere as Models para abstrair tabelas do banco.
     - **Opção 3:** Gere os Repositories para operações CRUD.
-    - **Opção 4:** Gere os Controllers para criar endpoints REST (esse passo deve vir depois dos dois anteriores).
+    - **Opção 4:** Gere os Controllers para criar endpoints REST (esse passo deve vir depois dos dois anteriores), pois o controller ler os métodos do repository e gera as rotas para cada método.
      **Opção 5:** SObre o servidor interno do CLI.
 
 
