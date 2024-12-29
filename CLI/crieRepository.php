@@ -43,12 +43,12 @@ class CrieRepository
             $repositoryContent .= "    }\n\n";
 
             $repositoryContent .= $this->generateCreateMethod($table, $filteredColumns);
+            $repositoryContent .= $this->generateRelationshipMethods($table);
             $repositoryContent .= $this->generateFindByIdMethod($table);
             $repositoryContent .= $this->generateFindAllMethod($table);
             $repositoryContent .= $this->generateUpdateMethod($table, $filteredColumns);
             $repositoryContent .= $this->generateDeleteMethod($table);
             $repositoryContent .= $this->generateErrorResponse();
-            $repositoryContent .= $this->generateRelationshipMethods($table);
 
             $repositoryContent .= "}\n";
 
