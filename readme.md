@@ -44,8 +44,7 @@ FastBackPHP foi criado para desenvolvedores que desejam automatizar a construç�
 
 1. Clone o repositório ou baixe os arquivos:
     ```bash
-    git clone https://github.com/faustinopsy/fastbackphp.git
-    cd fastbackphp
+    git clone https://github.com/faustinopsy/PHPCrudMVC-v7
     ```
 
 2. Instale as dependências via Composer:
