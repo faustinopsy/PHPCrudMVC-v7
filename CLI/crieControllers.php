@@ -2,7 +2,7 @@
 
 namespace Fast\Back\CLI;
 
-require_once __DIR__ .'/../vendor/autoload.php';
+require_once __DIR__ . '/../vendor/autoload.php';
 
 use DirectoryIterator;
 use ReflectionClass;
@@ -40,7 +40,7 @@ class ControllerGenerator
     public function generateControllers(): void
     {
         foreach (new DirectoryIterator($this->repositoryDir) as $fileInfo) {
-            if ($fileInfo->isDot() || $fileInfo->getExtension() !== 'php') {
+            if ($fileInfo->isDot() || $fileInfo->getExtension() !== 'php' || $fileInfo->getBasename() === 'BaseRepository.php') {
                 continue;
             }
 
@@ -58,11 +58,11 @@ class ControllerGenerator
             }
 
             $reflection = new ReflectionClass($repositoryClassName);
-            $rotas = lcfirst($modelClassName);
+            $rotasBase = lcfirst($modelClassName);
 
-            $methods = $this->generateMethods($reflection, $modelClassName, $rotas);
+            $methods = $this->generateMethods($reflection, $rotasBase);
 
-            $content = "<?php\n\nnamespace {$this->controllerNamespace};\n\nuse {$this->repositoryNamespace}\\$repositoryShortName;\nuse {$this->modelNamespace}\\$modelClassName;\nuse {$this->rotaNamespace};\n\nclass $controllerClassName {\n    private \$repository;\n\n    public function __construct() {\n        \$this->repository = new $repositoryShortName();\n            }\n\n    private function jsonResponse(\$data, string \$successMessage, string \$errorMessage, bool \$isError = false) {\n        \$response = [\n            'status' => \$isError,\n            'message' => \$isError ? \$successMessage : \$errorMessage ,\n            'data' => \$data\n        ];\n        header('Content-Type: application/json; charset=utf-8');\n        http_response_code(\$isError ? 200 : 400);\n        echo json_encode(\$response, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);\n    }\n\n";
+            $content = "<?php\n\nnamespace {$this->controllerNamespace};\n\nuse {$this->repositoryNamespace}\\$repositoryShortName;\nuse {$this->rotaNamespace};\n\nclass $controllerClassName {\n    private \$repository;\n\n    public function __construct() {\n        \$this->repository = new $repositoryShortName();\n    }\n\n    private function jsonResponse(\$data, int \$statusCode = 200) {\n        header('Content-Type: application/json; charset=utf-8');\n        http_response_code(\$statusCode);\n        echo json_encode(\$data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);\n    }\n\n";
 
             foreach ($methods as $methodCode) {
                 $content .= "    $methodCode\n";
@@ -75,56 +75,55 @@ class ControllerGenerator
         }
     }
 
-    private function generateMethods(ReflectionClass $reflection, string $modelClassName, string $rotas): array
+    private function generateMethods(ReflectionClass $reflection, string $rotasBase): array
     {
         $methods = [];
         foreach ($reflection->getMethods() as $method) {
-            if ($method->isPublic() && !in_array($method->getName(), ['__construct'])) {
+            if ($method->isPublic() && !$method->isConstructor()) {
                 $methodName = $method->getName();
+                
                 $httpMethod = 'POST';
-                $route = "/$rotas";
-                $parameters = "\$data";
+                $route = "/$rotasBase";
+                $parameters = '($data)';
+                $callParameters = '$data';
 
                 if (stripos($methodName, 'findAll') !== false) {
                     $httpMethod = 'GET';
-                    $route = "/$rotas";
-                    $parameters = '';
+                    $route = "/$rotasBase";
+                    $parameters = '()';
+                    $callParameters = '';
+                } elseif (stripos($methodName, 'findWithDetails') !== false) {
+                    $httpMethod = 'GET';
+                    $route = "/$rotasBase/{id}/details";
+                    $parameters = '($id)';
+                    $callParameters = '$id';
                 } elseif (stripos($methodName, 'findById') !== false) {
                     $httpMethod = 'GET';
-                    $route = "/$rotas/{id}";
-                    $parameters = "\$id";
-                } elseif (stripos($methodName, 'getMasterWithDetails') !== false) {
-                    $httpMethod = 'GET';
-                    $route = "/$rotas/getmasterdetail";
-                    $parameters = "";
-                } elseif (stripos($methodName, 'saveMasterDetail') !== false) {
-                    $httpMethod = 'POST';
-                    $route = "/$rotas/savemasterdetail";
-                    $parameters = "\$data";
-                } elseif (stripos($methodName, 'atualizaDetail') !== false) {
-                    $httpMethod = 'PUT';
-                    $route = "/$rotas/{id}/updatedetail";
-                    $parameters = "\$id";
-                } elseif (stripos($methodName, 'excluiDetail') !== false) {
-                    $httpMethod = 'DELETE';
-                    $route = "/$rotas/{id}/deletedetail";
-                    $parameters = "\$id";
+                    $route = "/$rotasBase/{id}";
+                    $parameters = '($id)';
+                    $callParameters = '$id';
                 } elseif (stripos($methodName, 'update') !== false) {
                     $httpMethod = 'PUT';
-                    $route = "/$rotas/{id}";
-                    $parameters = "\$id, \$data";
+                    $route = "/$rotasBase/{id}";
+                    $parameters = '($id, $data)';
+                    $callParameters = '$id, $data';
                 } elseif (stripos($methodName, 'delete') !== false) {
                     $httpMethod = 'DELETE';
-                    $route = "/$rotas/{id}";
-                    $parameters = "\$id";
+                    $route = "/$rotasBase/{id}";
+                    $parameters = '($id)';
+                    $callParameters = '$id';
+                } elseif (stripos($methodName, 'create') !== false) {
+                    $httpMethod = 'POST';
+                    $route = "/$rotasBase";
+                    $parameters = '($data)';
+                    $callParameters = '$data';
                 }
-
-                $methods[] = "#[Router('$route', methods: ['$httpMethod'])]\n    public function {$methodName}($parameters) {\n        \$result = \$this->repository->{$methodName}($parameters);\n        if (!is_array(\$result) && !\$result['success']) {\n            return \$this->jsonResponse(null, '', \$result['message'], \$result['success']);\n        }\n        return \$this->jsonResponse(\$result, 'Operação realizada com sucesso.', '', true);\n    }";
+                
+                $methods[] = "#[Router('$route', methods: ['$httpMethod'])]\n    public function {$methodName}{$parameters} {\n        \$result = \$this->repository->{$methodName}($callParameters);\n        if (\$result === null) {\n            return \$this->jsonResponse(['error' => 'Recurso não encontrado.'], 404);\n        }\n        if (isset(\$result['success']) && !\$result['success']) {\n            return \$this->jsonResponse(['error' => \$result['message']], 400);\n        }\n        return \$this->jsonResponse(\$result, 200);\n    }";
             }
         }
         return $methods;
     }
 }
 
-$generator = new ControllerGenerator();
-$generator->generateControllers();
+(new ControllerGenerator())->generateControllers();
