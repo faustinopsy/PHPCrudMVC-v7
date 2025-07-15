@@ -98,6 +98,78 @@ Ao executar `php Fast.php`, você verá as seguintes opções no terminal:
 
 ---
 
+## O Sistema de Rotas com Atributos
+O FastBackPHP utiliza Attributes (um recurso do PHP 8+) para um roteamento declarativo e limpo, inspirado em frameworks modernos. Em vez de um arquivo de rotas gigante, cada rota é definida diretamente acima do método do controller que ela executa.
+
+### Como Funciona?
+Quando você gera os controllers, a ferramenta inspeciona os métodos públicos da classe de repositório correspondente e cria um método no controller para cada um, adicionando um atributo #[Router(...)] acima dele.
+
+Exemplo de um UsersController.php gerado:
+```
+<?php
+
+namespace Fast\Back\Controllers;
+
+use Fast\Back\Repositories\UsersRepository;
+use Fast\Back\Rotas\Router;
+
+class UsersController 
+{
+    private $repository;
+
+    public function __construct() {
+        $this->repository = new UsersRepository();
+    }
+    
+    // Rota para buscar todos os usuários
+    #[Router('/users', methods: ['GET'])]
+    public function findAll() {
+        // ...
+    }
+
+    // Rota para buscar um usuário específico pelo ID
+    #[Router('/users/{id}', methods: ['GET'])]
+    public function findById($id) {
+        // ...
+    }
+
+    // Rota para criar um novo usuário
+    #[Router('/users', methods: ['POST'])]
+    public function create($data) {
+        // ...
+    }
+}
+```
+#[Router(...)]: É o atributo que define o endpoint.
+
+'/users/{id}': É o caminho (path) da rota. Partes entre chaves, como {id}, são parâmetros dinâmicos que são passados para o método.
+
+methods: ['GET']: É o verbo HTTP permitido para esta rota.
+
+O framework lê esses atributos automaticamente e direciona as requisições para o método correto.
+
+## Exemplo de Uso: Consumindo a API
+Após gerar o código e iniciar o servidor (php Fast.php > opção 5), você pode usar qualquer cliente HTTP (como Postman, Insomnia, ou o bom e velho curl) para interagir com seus novos endpoints.
+
+Listar todos os usuários (GET)
+```bash
+curl -X GET http://localhost/users
+```
+Buscar o usuário com ID 1 (GET com parâmetro)
+```bash
+curl -X GET http://localhost/users/1
+```
+Criar um novo usuário (POST com corpo JSON)
+```bash
+curl -X POST \
+  http://localhost:8080/users \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "email": "novo.usuario@example.com",
+    "password_hash": "um_hash_de_senha_muito_seguro"
+  }'
+```
+
 ## Contribuições
 Contribuições são bem-vindas! Caso tenha sugestões ou encontre bugs, abra uma issue ou envie um pull request no repositório oficial.
 
