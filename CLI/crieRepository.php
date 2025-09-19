@@ -26,13 +26,22 @@ class CrieRepository
             $columnsQuery = $this->pdo->query("DESCRIBE `$table`");
             $columns = $columnsQuery->fetchAll(PDO::FETCH_ASSOC);
 
-            $filteredColumns = array_filter($columns, fn($col) => $col['Field'] !== 'id');
-
-            $repositoryName = $this->pascalCase($table) . 'Repository';
+            $primaryKey = 'id';
+            foreach ($columns as $column) {
+                if ($column['Key'] === 'PRI') {
+                    $primaryKey = $column['Field'];
+                    break;
+                }
+            }
+            
+            $filteredColumns = array_filter($columns, fn($col) => $col['Key'] !== 'PRI');
+            $modelName = $this->pascalCase($table);
+            $repositoryName = $modelName . 'Repository';
             $repositoryFileName = __DIR__ . "/../Repositories/$repositoryName.php";
 
             $repositoryContent = "<?php\n\n";
             $repositoryContent .= "namespace Fast\\Back\\Repositories;\n\n";
+            $repositoryContent .= "use Fast\\Back\\Models\\{$modelName};\n";
             $repositoryContent .= "use Fast\\Back\\Database\\Database;\n";
             $repositoryContent .= "use PDO;\n";
             $repositoryContent .= "use PDOException;\n\n";
@@ -42,18 +51,16 @@ class CrieRepository
             $repositoryContent .= "        \$this->pdo = Database::getInstance();\n";
             $repositoryContent .= "    }\n\n";
 
-            $repositoryContent .= $this->generateCreateMethod($table, $filteredColumns);
-            $repositoryContent .= $this->generateFindByIdMethod($table);
-            $repositoryContent .= $this->generateFindAllMethod($table);
-            $repositoryContent .= $this->generateUpdateMethod($table, $filteredColumns);
-            $repositoryContent .= $this->generateDeleteMethod($table);
-            $repositoryContent .= $this->generateFindWithDetailsMethod($table);
-            $repositoryContent .= $this->generateErrorResponseMethod();
+            $repositoryContent .= $this->generateFindByIdMethod($table, $modelName, $primaryKey);
+            $repositoryContent .= $this->generateFindAllMethod($table, $modelName);
+            $repositoryContent .= $this->generateCreateMethod($table, $modelName, $filteredColumns);
+            $repositoryContent .= $this->generateUpdateMethod($table, $modelName, $filteredColumns, $primaryKey);
+            $repositoryContent .= $this->generateDeleteMethod($table, $primaryKey);
 
             $repositoryContent .= "}\n";
 
             if (!is_dir(__DIR__ . '/../Repositories')) {
-                mkdir(__DIR__ . '/../Repositories', 0777, true);
+                mkdir(__DIR__ . '/../Repositories', 0755, true);
             }
             file_put_contents($repositoryFileName, $repositoryContent);
 
@@ -61,158 +68,78 @@ class CrieRepository
         }
     }
 
-    private function generateFindWithDetailsMethod(string $masterTable): string
+    private function generateFindByIdMethod(string $table, string $modelName, string $primaryKey): string
     {
-        $relationships = $this->detectRelationships($masterTable);
-        $oneToManyRelations = array_filter($relationships, fn($rel) => $rel['master_table'] === $masterTable);
-
-        if (empty($oneToManyRelations)) {
-            return '';
-        }
-
-        $method = "    public function findWithDetails(int \$id): ?array\n    {\n";
-        $method .= "        try {\n";
-        $method .= "            \$master = \$this->findById(\$id);\n";
-        $method .= "            if (!\$master) {\n";
-        $method .= "                return null;\n";
-        $method .= "            }\n\n";
-
-        foreach ($oneToManyRelations as $relation) {
-            $detailTable = $relation['detail_table'];
-            $detailColumn = $relation['detail_column'];
-            $detailKey = lcfirst($this->pascalCase($detailTable));
-
-            $method .= "            \$detailQuery = \"SELECT * FROM `$detailTable` WHERE `$detailColumn` = :master_id\";\n";
-            $method .= "            \$stmtDetail = \$this->pdo->prepare(\$detailQuery);\n";
-            $method .= "            \$stmtDetail->bindValue(':master_id', \$id, PDO::PARAM_INT);\n";
-            $method .= "            \$stmtDetail->execute();\n";
-            $method .= "            \$master['$detailKey'] = \$stmtDetail->fetchAll(PDO::FETCH_ASSOC);\n\n";
-        }
-
-        $method .= "            return \$master;\n";
-        $method .= "        } catch (PDOException \$e) {\n";
-        $method .= "            return \$this->generateErrorResponse(\$e);\n";
-        $method .= "        }\n";
-        $method .= "    }\n\n";
-
-        return $method;
+        return "    /**\n     * @param int \$id\n     * @return {$modelName}|null\n     */\n" .
+            "    public function findById(int \$id): ?{$modelName}\n    {\n" .
+            "        \$query = \"SELECT * FROM `{$table}` WHERE `{$primaryKey}` = :id\";\n" .
+            "        \$stmt = \$this->pdo->prepare(\$query);\n" .
+            "        \$stmt->bindValue(':id', \$id, PDO::PARAM_INT);\n" .
+            "        \$stmt->execute();\n" .
+            "        \$data = \$stmt->fetch(PDO::FETCH_OBJ);\n\n" .
+            "        if (!\$data) {\n" .
+            "            return null;\n" .
+            "        }\n\n" .
+            "        return new {$modelName}(\$data);\n" .
+            "    }\n\n";
     }
 
-    private function generateCreateMethod($table, $columns): string
+    private function generateFindAllMethod(string $table, string $modelName): string
+    {
+        return "    /**\n     * @return {$modelName}[]\n     */\n" .
+            "    public function findAll(): array\n    {\n" .
+            "        \$query = \"SELECT * FROM `{$table}`\";\n" .
+            "        \$stmt = \$this->pdo->query(\$query);\n" .
+            "        \$results = \$stmt->fetchAll(PDO::FETCH_OBJ);\n\n" .
+            "        return array_map(fn(\$row) => new {$modelName}(\$row), \$results);\n" .
+            "    }\n\n";
+    }
+
+    private function generateCreateMethod(string $table, string $modelName, array $columns): string
     {
         $fields = array_column($columns, 'Field');
         $placeholders = array_map(fn($col) => ":$col", $fields);
-        $method = "    public function create(\$data): bool\n    {\n";
-        $method .= "        \$query = \"INSERT INTO `$table` (" . implode(', ', $fields) . ") VALUES (" . implode(', ', $placeholders) . ")\";\n";
-        $method .= "        try {\n";
-        $method .= "            \$stmt = \$this->pdo->prepare(\$query);\n";
+        $method = "    public function create({$modelName} \$model): int|false\n    {\n";
+        $method .= "        \$query = \"INSERT INTO `{$table}` (" . implode(', ', array_map(fn($f) => "`$f`", $fields)) . ") VALUES (" . implode(', ', $placeholders) . ")\";\n";
+        $method .= "        \$stmt = \$this->pdo->prepare(\$query);\n\n";
         foreach ($fields as $field) {
-            $method .= "            \$stmt->bindValue(':$field', \$data['$field'] ?? null);\n";
+            $pascalField = $this->pascalCase($field);
+            $method .= "        \$stmt->bindValue(':$field', \$model->get{$pascalField}());\n";
         }
-        $method .= "            return \$stmt->execute();\n";
-        $method .= "        } catch (PDOException \$e) {\n";
-        $method .= "            return \$this->generateErrorResponse(\$e);\n";
-        $method .= "        }\n";
+        $method .= "\n        \$success = \$stmt->execute();\n";
+        $method .= "        return \$success ? (int)\$this->pdo->lastInsertId() : false;\n";
         $method .= "    }\n\n";
         return $method;
     }
 
-    private function generateFindByIdMethod($table): string
-    {
-        return "    public function findById(\$id): ?array\n    {\n" .
-               "        \$query = \"SELECT * FROM `$table` WHERE id = :id\";\n" .
-               "        try {\n" .
-               "            \$stmt = \$this->pdo->prepare(\$query);\n" .
-               "            \$stmt->bindValue(':id', \$id, PDO::PARAM_INT);\n" .
-               "            \$stmt->execute();\n" .
-               "            \$result = \$stmt->fetch(PDO::FETCH_ASSOC);\n" .
-               "            return \$result ?: null;\n" .
-               "        } catch (PDOException \$e) {\n" .
-               "            return \$this->generateErrorResponse(\$e);\n" .
-               "        }\n" .
-               "    }\n\n";
-    }
-
-    private function generateFindAllMethod($table): string
-    {
-        return "    public function findAll(): array\n    {\n" .
-               "        \$query = \"SELECT * FROM `$table`\";\n" .
-               "        try {\n" .
-               "            \$stmt = \$this->pdo->query(\$query);\n" .
-               "            return \$stmt->fetchAll(PDO::FETCH_ASSOC);\n" .
-               "        } catch (PDOException \$e) {\n" .
-               "            return \$this->generateErrorResponse(\$e);\n" .
-               "        }\n" .
-               "    }\n\n";
-    }
-
-    private function generateUpdateMethod($table, $columns): string
+    private function generateUpdateMethod(string $table, string $modelName, array $columns, string $primaryKey): string
     {
         $fields = array_column($columns, 'Field');
         $setClause = implode(', ', array_map(fn($col) => "`$col` = :$col", $fields));
-        $method = "    public function update(\$id, \$data): bool\n    {\n";
-        $method .= "        \$query = \"UPDATE `$table` SET $setClause WHERE id = :id\";\n";
-        $method .= "        try {\n";
-        $method .= "            \$stmt = \$this->pdo->prepare(\$query);\n";
+        $method = "    public function update(int \$id, {$modelName} \$model): bool\n    {\n";
+        $method .= "        \$query = \"UPDATE `{$table}` SET {$setClause} WHERE `{$primaryKey}` = :id\";\n";
+        $method .= "        \$stmt = \$this->pdo->prepare(\$query);\n\n";
         foreach ($fields as $field) {
-            $method .= "            \$stmt->bindValue(':$field', \$data['$field'] ?? null);\n";
+            $pascalField = $this->pascalCase($field);
+            $method .= "        \$stmt->bindValue(':$field', \$model->get{$pascalField}());\n";
         }
-        $method .= "            \$stmt->bindValue(':id', \$id, PDO::PARAM_INT);\n";
-        $method .= "            return \$stmt->execute();\n";
-        $method .= "        } catch (PDOException \$e) {\n";
-        $method .= "            return \$this->generateErrorResponse(\$e);\n";
-        $method .= "        }\n" .
-                   "    }\n\n";
+        $method .= "        \$stmt->bindValue(':id', \$id, PDO::PARAM_INT);\n\n";
+        $method .= "        return \$stmt->execute();\n";
+        $method .= "    }\n\n";
         return $method;
     }
 
-    private function generateDeleteMethod($table): string
+    private function generateDeleteMethod(string $table, string $primaryKey): string
     {
-        return "    public function delete(\$id): bool\n    {\n" .
-               "        \$query = \"DELETE FROM `$table` WHERE id = :id\";\n" .
-               "        try {\n" .
-               "            \$stmt = \$this->pdo->prepare(\$query);\n" .
-               "            \$stmt->bindValue(':id', \$id, PDO::PARAM_INT);\n" .
-               "            return \$stmt->execute();\n" .
-               "        } catch (PDOException \$e) {\n" .
-               "            return \$this->generateErrorResponse(\$e);\n" .
-               "        }\n" .
-               "    }\n\n";
+        return "    public function delete(int \$id): bool\n    {\n" .
+            "        \$query = \"DELETE FROM `{$table}` WHERE `{$primaryKey}` = :id\";\n" .
+            "        \$stmt = \$this->pdo->prepare(\$query);\n" .
+            "        \$stmt->bindValue(':id', \$id, PDO::PARAM_INT);\n" .
+            "        return \$stmt->execute();\n" .
+            "    }\n\n";
     }
 
-    private function generateErrorResponseMethod(): string
-    {
-        return "    private function generateErrorResponse(PDOException \$e): array\n    {\n" .
-               "        return [\n" .
-               "            'success' => false,\n" .
-               "            'message' => \$e->getMessage(),\n" .
-               "            'code' => \$e->getCode(),\n" .
-               "        ];\n" .
-               "    }\n";
-    }
-
-    private function detectRelationships(string $table): array
-    {
-        $query = "
-            SELECT 
-                TABLE_NAME AS detail_table, 
-                COLUMN_NAME AS detail_column, 
-                REFERENCED_TABLE_NAME AS master_table
-            FROM 
-                INFORMATION_SCHEMA.KEY_COLUMN_USAGE
-            WHERE 
-                TABLE_SCHEMA = DATABASE() 
-                AND (TABLE_NAME = :table_name OR REFERENCED_TABLE_NAME = :referenced_table_name)
-                AND REFERENCED_TABLE_NAME IS NOT NULL
-        ";
-        $stmt = $this->pdo->prepare($query);
-        $stmt->bindValue(':table_name', $table, PDO::PARAM_STR);
-        $stmt->bindValue(':referenced_table_name', $table, PDO::PARAM_STR);
-        $stmt->execute();
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-    
-    private function pascalCase(string $string): string
+    public function pascalCase(string $string): string
     {
         return str_replace(' ', '', ucwords(str_replace('_', ' ', $string)));
     }

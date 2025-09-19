@@ -8,7 +8,6 @@ use PDO;
 class CrieModels
 {
     private PDO $pdo;
-
     public function __construct()
     {
         $this->pdo = Database::getInstance();
@@ -18,12 +17,10 @@ class CrieModels
     {
         $query = $this->pdo->query("SHOW TABLES");
         $tables = $query->fetchAll(PDO::FETCH_COLUMN);
-
         foreach ($tables as $table) {
             $columnsQuery = $this->pdo->query("DESCRIBE $table");
             $columns = $columnsQuery->fetchAll(PDO::FETCH_ASSOC);
-
-            $modelName = ucfirst($this->camelCase($table));
+            $modelName = $this->pascalCase($table);
             $modelFileName = __DIR__ . "/../Models/$modelName.php";
 
             $modelContent = "<?php\n\n";
@@ -31,31 +28,41 @@ class CrieModels
             $modelContent .= "class $modelName {\n";
 
             foreach ($columns as $column) {
-                $modelContent .= "    public \${$column['Field']};\n";
+                $modelContent .= "    private \${$column['Field']};\n";
             }
+            $modelContent .= "\n";
 
-            $modelContent .= "\n    public function __construct(\$data) {\n";
+            $modelContent .= "    public function __construct(?object \$data = null)\n    {\n";
             foreach ($columns as $column) {
                 $field = $column['Field'];
                 $modelContent .= "        \$this->$field = \$data->$field ?? null;\n";
             }
-            $modelContent .= "    }\n";
+            $modelContent .= "    }\n\n";
 
             foreach ($columns as $column) {
                 $field = $column['Field'];
-                $camelField = ucfirst($this->camelCase($field));
-                $modelContent .= "\n    public function get$camelField() {\n";
-                $modelContent .= "        return \$this->$field;\n";
-                $modelContent .= "    }\n";
-                $modelContent .= "\n    public function set$camelField(\$value): void {\n";
-                $modelContent .= "        \$this->$field = \$value;\n";
-                $modelContent .= "    }\n";
+                $pascalField = $this->pascalCase($field);
+                $modelContent .= "    public function get$pascalField()\n    {\n";
+                $modelContent .= "        return \$this->{$field};\n";
+                $modelContent .= "    }\n\n";
+                $modelContent .= "    public function set$pascalField(\$value): void\n    {\n";
+                $modelContent .= "        \$this->{$field} = \$value;\n";
+                $modelContent .= "    }\n\n";
             }
-
+            
+            $modelContent .= "    public function toArray(): array\n    {\n";
+            $modelContent .= "        \$data = [];\n";
+            foreach ($columns as $column) {
+                $field = $column['Field'];
+                $pascalField = $this->pascalCase($field);
+                $modelContent .= "        \$data['{$field}'] = \$this->get{$pascalField}();\n";
+            }
+            $modelContent .= "        return \$data;\n";
+            $modelContent .= "    }\n";
             $modelContent .= "}\n";
 
             if (!is_dir(__DIR__ . '/../Models')) {
-                mkdir(__DIR__ . '/../Models', 0777, true);
+                mkdir(__DIR__ . '/../Models', 0755, true);
             }
             file_put_contents($modelFileName, $modelContent);
 
@@ -63,11 +70,9 @@ class CrieModels
         }
     }
 
-    private function camelCase(string $string): string
+    private function pascalCase(string $string): string
     {
-        $string = str_replace('_', ' ', strtolower($string));
-        $string = ucwords($string);
-        return str_replace(' ', '', lcfirst($string));
+        return str_replace(' ', '', ucwords(str_replace('_', ' ', $string)));
     }
 }
 

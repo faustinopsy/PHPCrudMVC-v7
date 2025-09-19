@@ -33,7 +33,7 @@ class CLI {
                     self::generateControllers();
                     break;
                 case '5':
-                    exec("php -S localhost:8080");
+                    exec("php -S localhost:8090");
                 case '6':
                     echo "Saindo...\n";
                     exit;
