@@ -53,6 +53,7 @@ class CrieRepository
 
             $repositoryContent .= $this->generateFindByIdMethod($table, $modelName, $primaryKey);
             $repositoryContent .= $this->generateFindAllMethod($table, $modelName);
+            $repositoryContent .= $this->generatePaginateMethod($table, $modelName);
             $repositoryContent .= $this->generateCreateMethod($table, $modelName, $filteredColumns);
             $repositoryContent .= $this->generateUpdateMethod($table, $modelName, $filteredColumns, $primaryKey);
             $repositoryContent .= $this->generateDeleteMethod($table, $primaryKey);
@@ -92,6 +93,44 @@ class CrieRepository
             "        \$stmt = \$this->pdo->query(\$query);\n" .
             "        \$results = \$stmt->fetchAll(PDO::FETCH_OBJ);\n\n" .
             "        return array_map(fn(\$row) => new {$modelName}(\$row), \$results);\n" .
+            "    }\n\n";
+    }
+
+    private function generatePaginateMethod(string $table, string $modelName): string
+    {
+        return "    /**\n" .
+            "     * Busca registros de forma paginada.\n" .
+            "     * @param int \$page O número da página atual.\n" .
+            "     * @param int \$perPage O número de itens por página.\n" .
+            "     * @return array Um array estruturado com os dados da paginação.\n" .
+            "     */\n" .
+            "    public function paginate(int \$page = 1, int \$perPage = 15): array\n    {\n" .
+            "        // 1. Obter o total de registros\n" .
+            "        \$totalQuery = \"SELECT COUNT(*) FROM `{$table}`\";\n" .
+            "        \$totalStmt = \$this->pdo->query(\$totalQuery);\n" .
+            "        \$total = \$totalStmt->fetchColumn();\n\n" .
+            "        // 2. Calcular o offset\n" .
+            "        \$offset = (\$page - 1) * \$perPage;\n\n" .
+            "        // 3. Obter os registros da página atual\n" .
+            "        \$dataQuery = \"SELECT * FROM `{$table}` LIMIT :limit OFFSET :offset\";\n" .
+            "        \$dataStmt = \$this->pdo->prepare(\$dataQuery);\n" .
+            "        \$dataStmt->bindValue(':limit', \$perPage, PDO::PARAM_INT);\n" .
+            "        \$dataStmt->bindValue(':offset', \$offset, PDO::PARAM_INT);\n" .
+            "        \$dataStmt->execute();\n" .
+            "        \$results = \$dataStmt->fetchAll(PDO::FETCH_OBJ);\n\n" .
+            "        // 4. Hidratar os resultados\n" .
+            "        \$data = array_map(fn(\$row) => new {$modelName}(\$row), \$results);\n\n" .
+            "        // 5. Montar o array de retorno\n" .
+            "        \$lastPage = ceil(\$total / \$perPage);\n\n" .
+            "        return [\n" .
+            "            'data' => \$data,\n" .
+            "            'total' => (int) \$total,\n" .
+            "            'per_page' => (int) \$perPage,\n" .
+            "            'current_page' => (int) \$page,\n" .
+            "            'last_page' => (int) \$lastPage,\n" .
+            "            'from' => \$offset + 1,\n" .
+            "            'to' => \$offset + count(\$data)\n" .
+            "        ];\n" .
             "    }\n\n";
     }
 

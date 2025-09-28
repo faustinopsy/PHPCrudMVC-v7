@@ -13,8 +13,9 @@ class CLI {
             echo "2. Gerar Models\n";
             echo "3. Gerar Repositories\n";
             echo "4. Gerar Controllers\n";
-            echo "5. Executar Servidor\n";
-            echo "6. Sair\n";
+            echo "5. Gerar Autenticação (Login/Registro)\n";
+            echo "6. Executar Servidor\n"; 
+            echo "7. Sair\n";
             echo "Escolha uma opção: ";
 
             $choice = trim(fgets(STDIN));
@@ -32,14 +33,30 @@ class CLI {
                 case '4':
                     self::generateControllers();
                     break;
-                case '5':
-                    exec("php -S localhost:8090");
+                case '5': 
+                    self::generateAuth();
+                    break;
                 case '6':
+                    exec("php -S localhost:8090 -t public");
+                    break;
+                case '7':
                     echo "Saindo...\n";
                     exit;
                 default:
                     echo "Opção inválida. Tente novamente.\n";
             }
+        }
+    }
+
+    private static function generateAuth() {
+        echo "Gerando sistema de autenticação...\n";
+        exec("php CLI/crieAuth.php", $output, $returnVar);
+        echo implode("\n", $output) . "\n";
+        if ($returnVar === 0) {
+            echo "Sistema de autenticação gerado com sucesso.\n";
+            echo "Lembre-se de configurar 'Config/Mail.php' e rodar as migrações se necessário.\n";
+        } else {
+            echo "Erro ao gerar sistema de autenticação.\n";
         }
     }
 
@@ -90,7 +107,15 @@ class CLI {
 
         $configFile = __DIR__ . "../Database/Config.php";
 
-        $configContent = "<?php\n\nnamespace Fast\\Back\\Database;\n\nclass Config\n{\n    public static function get()\n    {\n        return [\n            'database' => " . var_export($config, true) . "\n        ];\n    }\n}\n";
+        $configContent = "<?php\n\nnamespace Fast\\Back\\Database;\n\n
+        class Config\n{\n    
+        public static function get()\n
+        {\n        
+            return [\n            
+            'database' => " . var_export($config, true) . "\n
+                    ];\n
+            }\n
+        }\n";
 
         file_put_contents($configFile, $configContent);
 
