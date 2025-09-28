@@ -1,6 +1,6 @@
 <?php
 
-namespace Fast\Back\View;
+namespace Fast\Back\Helpers;
 
 class ViewRenderer
 {

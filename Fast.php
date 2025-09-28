@@ -37,8 +37,7 @@ class CLI {
                     self::generateAuth();
                     break;
                 case '6':
-                    exec("php -S localhost:8090 -t public");
-                    break;
+                   exec("php -S localhost:8090");
                 case '7':
                     echo "Saindo...\n";
                     exit;
@@ -49,7 +48,7 @@ class CLI {
     }
 
     private static function generateAuth() {
-        echo "Gerando sistema de autenticação...\n";
+        echo "Digite o nome da tabela de Usuario para login:\n";
         exec("php CLI/crieAuth.php", $output, $returnVar);
         echo implode("\n", $output) . "\n";
         if ($returnVar === 0) {

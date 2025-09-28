@@ -54,6 +54,9 @@ class CrieRepository
             $repositoryContent .= $this->generateFindByIdMethod($table, $modelName, $primaryKey);
             $repositoryContent .= $this->generateFindAllMethod($table, $modelName);
             $repositoryContent .= $this->generatePaginateMethod($table, $modelName);
+            $columnNames = array_column($columns, 'Field');
+            $emailColumn = current(array_intersect($columnNames, ['email', 'user_email', 'email_usuario']));    
+            $repositoryContent .= $this->generateFindByEmailMethod($table, $modelName, $emailColumn);
             $repositoryContent .= $this->generateCreateMethod($table, $modelName, $filteredColumns);
             $repositoryContent .= $this->generateUpdateMethod($table, $modelName, $filteredColumns, $primaryKey);
             $repositoryContent .= $this->generateDeleteMethod($table, $primaryKey);
@@ -67,6 +70,23 @@ class CrieRepository
 
             echo "Repositório $repositoryName gerado com sucesso!\n";
         }
+    }
+
+    private function generateFindByEmailMethod(string $table, string $modelName, string $emailColumn): string
+    {
+        return "    /**\n     * Encontra um registro pelo campo de e-mail.\n" .
+            "     * @param string \$email\n     * @return {$modelName}|null\n     */\n" .
+            "    public function findByEmail(string \$email): ?{$modelName}\n    {\n" .
+            "        \$query = \"SELECT * FROM `{$table}` WHERE `{$emailColumn}` = :email\";\n" .
+            "        \$stmt = \$this->pdo->prepare(\$query);\n" .
+            "        \$stmt->bindValue(':email', \$email, PDO::PARAM_STR);\n" .
+            "        \$stmt->execute();\n" .
+            "        \$data = \$stmt->fetch(PDO::FETCH_OBJ);\n\n" .
+            "        if (!\$data) {\n" .
+            "            return null;\n" .
+            "        }\n\n" .
+            "        return new {$modelName}(\$data);\n" .
+            "    }\n\n";
     }
 
     private function generateFindByIdMethod(string $table, string $modelName, string $primaryKey): string

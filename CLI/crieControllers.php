@@ -8,7 +8,7 @@ use DirectoryIterator;
 use ReflectionClass;
 use Fast\Back\Database\Database;
 use Fast\Back\Rotas\Router;
-use Fast\Back\View\ViewRenderer;
+use Fast\Back\Helpers\ViewRenderer;
 
 class ControllerGenerator
 {
@@ -47,6 +47,9 @@ class ControllerGenerator
         }
         if (!is_dir($this->validatorDir)) mkdir($this->validatorDir, 0755, true); 
     }
+
+    
+
     public function generateControllers(): void
     {
         $this->generateLayoutPartials();
@@ -81,22 +84,37 @@ class ControllerGenerator
 
     private function generateControllerContent(string $controllerClassName, string $repositoryShortName, string $modelClassName, string $rotasBase, ReflectionClass $reflection): string
     {
+         $authMiddlewarePath = __DIR__ . '/../Middleware/AuthMiddleware.php';
+        $authExists = file_exists($authMiddlewarePath);
+
+        $authUseStatement = $authExists ? "use Fast\\Back\\Middleware\\AuthMiddleware;\n" : "";
+        $authTrait = $authExists ? "    use AuthMiddleware;\n\n" : "";
+        $userControllerName = $this->pascalCase($modelClassName) . 'Controller';
+        $handleCall = "self::handle();";
+        if ($controllerClassName === $userControllerName) {
+            $handleCall = "self::handle(['admin']); // Apenas admins podem gerenciar usuários";
+        }
+        $authHandleCall = $authExists ? "        {$handleCall}\n" : "";
+
         $methods = $this->generateMethods($reflection, $rotasBase, $modelClassName);
         $validatorClassName = $modelClassName . 'Validator';
         $content = "<?php\n\nnamespace {$this->controllerNamespace};\n\n";
         $content .= "use {$this->repositoryNamespace}\\{$repositoryShortName};\n";
         $content .= "use {$this->modelNamespace}\\{$modelClassName};\n";
         $content .= "use {$this->validatorNamespace}\\{$validatorClassName};\n";
+        $content .= "use Fast\\Back\\Middleware\\AuthMiddleware;\n";
         $content .= "use Fast\\Back\\Helpers\\Validator;\n";
         $content .= "use Fast\\Back\\Helpers\\Flash;\n";
         $content .= "use Fast\\Back\\Rotas\\Router;\n";
-        $content .= "use Fast\\Back\\View\\ViewRenderer;\n";
+        $content .= "use Fast\\Back\\Helpers\\ViewRenderer;\n";
         $content .= "use PDOException;\n\n";
         $content .= "class {$controllerClassName} {\n";
         $content .= "    private \$repository;\n";
         $content .= "    private \$view;\n\n";
         $content .= "    private \$validator;\n\n";
+        $content .=      $authTrait;
         $content .= "    public function __construct() {\n";
+        $content .=          $authHandleCall;
         $content .= "        \$this->repository = new {$repositoryShortName}();\n";
         $content .= "        \$this->view = new ViewRenderer();\n";
         $content .= "        \$this->validator = new {$validatorClassName}();\n";
@@ -499,6 +517,11 @@ class ControllerGenerator
     private function snakeCase(string $string): string
     {
         return strtolower(preg_replace('/(?<!^)[A-Z]/', '_$0', $string));
+    }
+
+    public function pascalCase(string $string): string
+    {
+        return str_replace(' ', '', ucwords(str_replace('_', ' ', $string)));
     }
 }
 
